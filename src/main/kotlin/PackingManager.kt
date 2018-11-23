@@ -16,21 +16,21 @@ class PackingManager {
     fun lambdaHandler(event: SQSEvent){
 
         for (record in event.records) {
-            val inputObj = mapper.readValue<HandlerInput>(record.body)
-            when (inputObj.method) {
+            val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
+            when (rpcObj.method) {
                 "packOrder" -> {
-                    println("Method: $inputObj.method received, processing")
+                    println("Method: $rpcObj.method received, processing")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_ASYNC_HANDLER).queueUrl
-                    inputObj.method="packOrderOK"
-                    println("Sending Method: $inputObj.method to $SQS_ASYNC_HANDLER")
+                    rpcObj.method="packOrderOK"
+                    println("Sending Method: $rpcObj.method to $SQS_ASYNC_HANDLER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)
-                            .withMessageBody(mapper.writeValueAsString(inputObj))
+                            .withMessageBody(mapper.writeValueAsString(rpcObj))
                             .withDelaySeconds(5)
                     sqs.sendMessage(sendMessageQ)
                 }
-                else -> println("Method:" + inputObj.method + " is unknown")
+                else -> println("Method:" + rpcObj.method + " is unknown")
             }
         }
         return }

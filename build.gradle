@@ -112,14 +112,26 @@ task deployFunctionShipmentManager(type: AWSLambdaMigrateFunctionTask, dependsOn
 }
 
 
-task invokeFunctionSyncHandler(type: AWSLambdaInvokeTask) {
+task invokeSyncHandlerNewOrder(type: AWSLambdaInvokeTask) {
     functionName = project.name+('-sync-handler')
     invocationType = InvocationType.RequestResponse
-    payload = file("src/test/resources/sample_request.json")
+    payload = file("src/test/resources/newOrder_request.json")
     doLast {
         println "Lambda function result: " + new String(invokeResult.payload.array(), "UTF-8")
     }
 }
+
+task invokeSyncHandlerStatusOrder(type: AWSLambdaInvokeTask) {
+    functionName = project.name+('-sync-handler')
+    invocationType = InvocationType.RequestResponse
+    payload = file("src/test/resources/statusOrder_request.json")
+    doLast {
+        println "Lambda function result: " + new String(invokeResult.payload.array(), "UTF-8")
+    }
+}
+
+
+
 
 task deleteFunction(type: AWSLambdaDeleteFunctionTask) {
     functionName = project.name.replace('.','-')

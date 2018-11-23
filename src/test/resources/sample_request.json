@@ -1,0 +1,6 @@
+{"jsonrpc": "2.0",
+  "method": "newOrder",
+  "params": { "ref": "6",
+    "order": "[{\"product\": \"shoe\", \"colour\": \"blue\", \"qty\": 2},{\"product\": \"shoe\", \"colour\": \"red\", \"qty\": 1}]"
+  },
+  "id": "4"}

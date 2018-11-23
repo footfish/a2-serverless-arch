@@ -1,0 +1,130 @@
+import com.amazonaws.services.lambda.model.InvocationType
+import jp.classmethod.aws.gradle.lambda.AWSLambdaInvokeTask
+import jp.classmethod.aws.gradle.lambda.AWSLambdaMigrateFunctionTask
+import jp.classmethod.aws.gradle.lambda.AWSLambdaDeleteFunctionTask
+
+buildscript {
+    ext.kotlin_version = '1.2.51'
+    ext.aws_sdk_version = '1.11.163'
+
+    repositories {
+        mavenCentral()
+        jcenter()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.github.jengelman.gradle.plugins:shadow:2.0.2"
+        classpath "jp.classmethod.aws:gradle-aws-plugin:0.30"
+    }
+}
+
+version '1.0-SNAPSHOT'
+
+apply plugin: 'kotlin'
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'jp.classmethod.aws'
+apply plugin: 'jp.classmethod.aws.lambda'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    compile "com.fasterxml.jackson.module:jackson-module-kotlin:2.9.4.1"
+    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+    compile "com.amazonaws:aws-lambda-java-core:1.2.0"
+    compile "com.amazonaws:aws-lambda-java-events:2.2.3"
+    compile "com.amazonaws:aws-java-sdk-dynamodb:$aws_sdk_version"
+    compile "com.amazonaws:aws-java-sdk-sqs:$aws_sdk_version"
+}
+
+aws {
+    profileName "default"
+    region "eu-west-1"
+}
+
+
+task deployFunction(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name.replace('.','-') //NOTE: can't have period (.) in project name
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "OrderHandler::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
+task deployFunctionSyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name+('-sync-handler')
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "SyncHandler::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
+task deployFunctionAsyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name+('-async-handler')
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "AsyncHandler::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
+task deployFunctionStockManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name+('-stock-manager')
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "StockManager::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
+task deployFunctionPackingManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name+('-packing-manager')
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "PackingManager::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
+task deployFunctionShipmentManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name+('-shipment-manager')
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "ShipmentManager::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
+
+task invokeFunctionSyncHandler(type: AWSLambdaInvokeTask) {
+    functionName = project.name+('-sync-handler')
+    invocationType = InvocationType.RequestResponse
+    payload = file("src/test/resources/sample_request.json")
+    doLast {
+        println "Lambda function result: " + new String(invokeResult.payload.array(), "UTF-8")
+    }
+}
+
+task deleteFunction(type: AWSLambdaDeleteFunctionTask) {
+    functionName = project.name.replace('.','-')
+}
+
+task deleteFunctionSyncHandler(type: AWSLambdaDeleteFunctionTask) {
+    functionName = project.name+('-sync-handler')
+}

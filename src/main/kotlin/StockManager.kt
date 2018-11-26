@@ -1,4 +1,3 @@
-import java.io.*
 import com.fasterxml.jackson.module.kotlin.*
 import com.amazonaws.services.lambda.runtime.events.SQSEvent
 import com.amazonaws.services.sqs.AmazonSQSClientBuilder
@@ -18,19 +17,25 @@ class StockManager {
         for (record in event.records) {
             val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
             when (rpcObj.method) {
+                "newOrder" -> {
+                    println("Method: ${rpcObj.method} received, processing")
+                }
+                "cancelOrder" -> {
+                    println("Method: ${rpcObj.method} received, processing")
+                }
                 "stockCheck" -> {
-                    println("Method: $rpcObj.method received, processing")
+                    println("Method: ${rpcObj.method} received, processing")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_ASYNC_HANDLER).queueUrl
                     rpcObj.method="stockCheckOK"
-                    println("Sending Method: $rpcObj.method to $SQS_ASYNC_HANDLER")
+                    println("Sending Method: ${rpcObj.method} to $SQS_ASYNC_HANDLER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)
                             .withMessageBody(mapper.writeValueAsString(rpcObj))
                             .withDelaySeconds(5)
                     sqs.sendMessage(sendMessageQ)
                 }
-                else -> println("Method:" + rpcObj.method + " is unknown")
+                else -> println("Method: ${rpcObj.method} is unknown")
             }
         }
         return }

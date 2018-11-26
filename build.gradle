@@ -37,6 +37,7 @@ dependencies {
     compile "com.amazonaws:aws-lambda-java-events:2.2.3"
     compile "com.amazonaws:aws-java-sdk-dynamodb:$aws_sdk_version"
     compile "com.amazonaws:aws-java-sdk-sqs:$aws_sdk_version"
+    compile "com.amazonaws:aws-java-sdk-sns:$aws_sdk_version"    
 }
 
 aws {
@@ -125,6 +126,15 @@ task invokeSyncHandlerStatusOrder(type: AWSLambdaInvokeTask) {
     functionName = project.name+('-sync-handler')
     invocationType = InvocationType.RequestResponse
     payload = file("src/test/resources/statusOrder_request.json")
+    doLast {
+        println "Lambda function result: " + new String(invokeResult.payload.array(), "UTF-8")
+    }
+}
+
+task invokeSyncHandlerCancelOrder(type: AWSLambdaInvokeTask) {
+    functionName = project.name+('-sync-handler')
+    invocationType = InvocationType.RequestResponse
+    payload = file("src/test/resources/cancelOrder_request.json")
     doLast {
         println "Lambda function result: " + new String(invokeResult.payload.array(), "UTF-8")
     }

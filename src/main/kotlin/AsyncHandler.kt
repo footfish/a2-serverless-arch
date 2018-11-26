@@ -19,19 +19,20 @@ const val SQS_SHIPMENT_MANAGER = "shipmentManagerQ"
 class AsyncHandler {
     val mapper = jacksonObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false) //stops mapper trying (and failing) to deserialise order data
-            .configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES,false)  //allows ignoring of empty properties (specifically for id, as we don't send for notifications to queues)
+            .configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false)  //allows ignoring of empty properties (specifically for id, as we don't send for notifications to queues)
             .setSerializationInclusion(JsonInclude.Include.NON_EMPTY) //drops empty fields in serialise (specifically for id, as we don't send for notifications to queues)
 
-    fun lambdaHandler(event: SQSEvent){
+    fun lambdaHandler(event: SQSEvent) {
 
         for (record in event.records) {
             val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
             when (rpcObj.method) {
                 "newOrder" -> {
                     println("Method: ${rpcObj.method} received, processing")
+                    updateOrderDbAttribute(rpcObj.params.ref, "OrderStatus", "Active")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_STOCK_MANAGER).queueUrl
-                    rpcObj.method="stockCheck"
+                    rpcObj.method = "stockCheck"
                     println("Sending Method: ${rpcObj.method} to $SQS_STOCK_MANAGER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)
@@ -39,61 +40,67 @@ class AsyncHandler {
                             .withDelaySeconds(5)
                     sqs.sendMessage(sendMessageQ)
                     //update progress in Db
-                    updateOrderDbAttribute(rpcObj.params.ref,"OrderStatus","Active")
-                    updateOrderDbAttribute(rpcObj.params.ref,"StockCheck","In Progress")
-                    updateOrderDbAttribute(rpcObj.params.ref,"Packing","Waiting")
-                    updateOrderDbAttribute(rpcObj.params.ref,"Shipping","Waiting")
+                    updateOrderDbAttribute(rpcObj.params.ref, "StockCheck", "In Progress")
+                    updateOrderDbAttribute(rpcObj.params.ref, "Packing", "Waiting")
+                    updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "Waiting")
                 }
                 "stockCheckOK" -> {
                     println("Method: ${rpcObj.method} received, processing")
                     //mark stock checked in Db
-                    updateOrderDbAttribute(rpcObj.params.ref,"StockCheck","OK")
-                    //send SQS packing request
-                    val sqs = AmazonSQSClientBuilder.defaultClient()
-                    val sqsUrl = sqs.getQueueUrl(SQS_PACKING_MANAGER).queueUrl
-                    rpcObj.method="packOrder"
-                    println("Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
-                    val sendMessageQ = SendMessageRequest()
-                            .withQueueUrl(sqsUrl)
-                            .withMessageBody(mapper.writeValueAsString(rpcObj))
-                            .withDelaySeconds(5)
-                    sqs.sendMessage(sendMessageQ)
-                    //update progress in Db
-                    updateOrderDbAttribute(rpcObj.params.ref,"Packing","In Progress")
+                    updateOrderDbAttribute(rpcObj.params.ref, "StockCheck", "OK")
+
+                    if (orderStatusCheck(rpcObj.params.ref)) { //Don't pack if order is not active
+                        //send SQS packing request
+                        val sqs = AmazonSQSClientBuilder.defaultClient()
+                        val sqsUrl = sqs.getQueueUrl(SQS_PACKING_MANAGER).queueUrl
+                        rpcObj.method = "packOrder"
+                        println("Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
+                        val sendMessageQ = SendMessageRequest()
+                                .withQueueUrl(sqsUrl)
+                                .withMessageBody(mapper.writeValueAsString(rpcObj))
+                                .withDelaySeconds(5)
+                        sqs.sendMessage(sendMessageQ)
+                        //update progress in Db
+                        updateOrderDbAttribute(rpcObj.params.ref, "Packing", "In Progress")
+                    }
                 }
                 "packOrderOK" -> {
                     println("Method: ${rpcObj.method} received, processing")
-                    val sqs = AmazonSQSClientBuilder.defaultClient()
                     //mark order packed in Db
-                    updateOrderDbAttribute(rpcObj.params.ref,"Packing","OK")
-                    //send SQS packing request
-                    val sqsUrl = sqs.getQueueUrl(SQS_SHIPMENT_MANAGER).queueUrl
-                    rpcObj.method="shipOrder"
-                    println("Sending Method: ${rpcObj.method} to $SQS_SHIPMENT_MANAGER")
-                    val sendMessageQ = SendMessageRequest()
-                            .withQueueUrl(sqsUrl)
-                            .withMessageBody(mapper.writeValueAsString(rpcObj))
-                            .withDelaySeconds(5)
-                    sqs.sendMessage(sendMessageQ)
-                    //update progress in Db
-                    updateOrderDbAttribute(rpcObj.params.ref,"Shipping","In Progress")
+                    updateOrderDbAttribute(rpcObj.params.ref, "Packing", "OK")
+
+                    if (orderStatusCheck(rpcObj.params.ref)) { //Don't ship if order is not active
+                        //send SQS packing request
+                        val sqs = AmazonSQSClientBuilder.defaultClient()
+                        val sqsUrl = sqs.getQueueUrl(SQS_SHIPMENT_MANAGER).queueUrl
+                        rpcObj.method = "shipOrder"
+                        println("Sending Method: ${rpcObj.method} to $SQS_SHIPMENT_MANAGER")
+                        val sendMessageQ = SendMessageRequest()
+                                .withQueueUrl(sqsUrl)
+                                .withMessageBody(mapper.writeValueAsString(rpcObj))
+                                .withDelaySeconds(5)
+                        sqs.sendMessage(sendMessageQ)
+                        //update progress in Db
+                        updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "In Progress")
+                    }
                 }
                 "shipOrderOK" -> {
                     println("Method: ${rpcObj.method} received, processing")
                     //mark order shipped and completed in Db
-                    updateOrderDbAttribute(rpcObj.params.ref,"Shipping","OK")
-                    updateOrderDbAttribute(rpcObj.params.ref,"OrderStatus","Completed")
+                    updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "OK")
+                    updateOrderDbAttribute(rpcObj.params.ref, "OrderStatus", "Completed")
                 }
                 "cancelOrder" -> {
                     println("Method: ${rpcObj.method} received, processing")
-                    updateOrderDbAttribute(rpcObj.params.ref,"Shipping","Cancelled")
-                    updateOrderDbAttribute(rpcObj.params.ref,"OrderStatus","Cancelled")
+                    updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "Cancelled")
+                    updateOrderDbAttribute(rpcObj.params.ref, "OrderStatus", "Cancelled")
                 }
                 else -> println("Method: ${rpcObj.method}  is unknown")
             }
         }
 
-        return }
+        return
+    }
 
     private fun updateOrderDbAttribute(orderRef: String, attributeName: String, attributeValue: String) {
         val orderTable = DynamoDB(AmazonDynamoDBClientBuilder.standard().build()).getTable(ORDER_TABLE)
@@ -103,5 +110,9 @@ class AsyncHandler {
 
     }
 
-
+    private fun orderStatusCheck(orderRef: String): Boolean {
+        val orderTable = DynamoDB(AmazonDynamoDBClientBuilder.standard().build()).getTable(ORDER_TABLE)
+        val orderStatus = orderTable.getItem("orderRef", orderRef, "orderStatus", null).getString("orderStatus")
+        return (orderStatus == "Active")
+    }
 }

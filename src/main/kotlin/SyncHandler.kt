@@ -29,7 +29,7 @@ class SyncHandler {
             .configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES,false)  //allows ignoring of empty properties (specifically for id, as we don't send for notifications to queues)
             .setSerializationInclusion(JsonInclude.Include.NON_EMPTY) //drops empty fields in serialise (specifically for id, as we don't send for notifications to queues)
 
-    fun lambdaHandler(input: InputStream, output: OutputStream): Unit {
+    fun lambdaHandler(input: InputStream, output: OutputStream) {
         val rpcObj = mapper.readValue<JsonRpcInput>(input) //deserialise JSON input stream to rpcObj
         val orderTable = DynamoDB(AmazonDynamoDBClientBuilder.standard().build()).getTable(ORDER_TABLE)
 
@@ -67,9 +67,9 @@ class SyncHandler {
             "cancelOrder" -> {
                 try {
                     //Check the shipping status in Db
-                    val shippingStatus = orderTable.getItem("orderRef", rpcObj.params.ref, "Shipping", null).getString("Shipping")
+                    val shippingStatus = orderTable.getItem("orderRef", rpcObj.params.ref, "shipping", null).getString("shipping")
                     if (shippingStatus == "Waiting") {
-                        //Shipping not started proceed to send cancelOrder onto SNS
+                        //shipping not started proceed to send cancelOrder onto SNS
                         rpcObj.id = "" //clear id (not used in rpc notifications)
                         val sns = AmazonSNSClientBuilder.defaultClient()
                         val createTopicResult = sns.createTopic(CreateTopicRequest(SNS_ORDER_TOPIC)) //idempotent, returns topic ARN if exists

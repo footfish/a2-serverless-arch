@@ -27,7 +27,11 @@ class StockManager {
                     println("Method: ${rpcObj.method} received, processing")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_ASYNC_HANDLER).queueUrl
-                    rpcObj.method="stockCheckOK"
+                    if (rpcObj.params.ref.toInt()%3 == 0) {   // stockCheck fails if order ref dividable by 3
+                        rpcObj.method = "stockCheckNOK"
+                    } else {
+                        rpcObj.method = "stockCheckOK"
+                    }
                     println("Sending Method: ${rpcObj.method} to $SQS_ASYNC_HANDLER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)

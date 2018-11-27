@@ -6,6 +6,9 @@ import com.amazonaws.services.dynamodbv2.document.utils.NameMap
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap
 import com.amazonaws.services.dynamodbv2.model.ReturnValue
 import com.amazonaws.services.lambda.runtime.events.SQSEvent
+import com.amazonaws.services.sns.AmazonSNSClientBuilder
+import com.amazonaws.services.sns.model.CreateTopicRequest
+import com.amazonaws.services.sns.model.PublishRequest
 import com.amazonaws.services.sqs.AmazonSQSClientBuilder
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.amazonaws.services.sqs.model.SendMessageRequest
@@ -14,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 const val SQS_STOCK_MANAGER = "stockManagerQ"
 const val SQS_PACKING_MANAGER = "packingManagerQ"
 const val SQS_SHIPMENT_MANAGER = "shipmentManagerQ"
+const val SNS_EXCEPTION_TOPIC = "orderException"
 
 
 class AsyncHandler {
@@ -26,10 +30,10 @@ class AsyncHandler {
 
         for (record in event.records) {
             val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
+            println("Method: ${rpcObj.method} received, processing")
             when (rpcObj.method) {
                 "newOrder" -> {
-                    println("Method: ${rpcObj.method} received, processing")
-                    updateOrderDbAttribute(rpcObj.params.ref, "OrderStatus", "Active")
+                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Active")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_STOCK_MANAGER).queueUrl
                     rpcObj.method = "stockCheck"
@@ -40,14 +44,13 @@ class AsyncHandler {
                             .withDelaySeconds(5)
                     sqs.sendMessage(sendMessageQ)
                     //update progress in Db
-                    updateOrderDbAttribute(rpcObj.params.ref, "StockCheck", "In Progress")
-                    updateOrderDbAttribute(rpcObj.params.ref, "Packing", "Waiting")
-                    updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "Waiting")
+                    updateOrderDbAttribute(rpcObj.params.ref, "stockCheck", "In Progress")
+                    updateOrderDbAttribute(rpcObj.params.ref, "packing", "Waiting")
+                    updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Waiting")
                 }
                 "stockCheckOK" -> {
-                    println("Method: ${rpcObj.method} received, processing")
                     //mark stock checked in Db
-                    updateOrderDbAttribute(rpcObj.params.ref, "StockCheck", "OK")
+                    updateOrderDbAttribute(rpcObj.params.ref, "stockCheck", "Done")
 
                     if (orderStatusCheck(rpcObj.params.ref)) { //Don't pack if order is not active
                         //send SQS packing request
@@ -61,13 +64,14 @@ class AsyncHandler {
                                 .withDelaySeconds(5)
                         sqs.sendMessage(sendMessageQ)
                         //update progress in Db
-                        updateOrderDbAttribute(rpcObj.params.ref, "Packing", "In Progress")
+                        updateOrderDbAttribute(rpcObj.params.ref, "packing", "In Progress")
+                    } else {
+                        println("Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
                     }
                 }
-                "packOrderOK" -> {
-                    println("Method: ${rpcObj.method} received, processing")
+                    "packOrderOK" -> {
                     //mark order packed in Db
-                    updateOrderDbAttribute(rpcObj.params.ref, "Packing", "OK")
+                    updateOrderDbAttribute(rpcObj.params.ref, "packing", "Done")
 
                     if (orderStatusCheck(rpcObj.params.ref)) { //Don't ship if order is not active
                         //send SQS packing request
@@ -81,19 +85,25 @@ class AsyncHandler {
                                 .withDelaySeconds(5)
                         sqs.sendMessage(sendMessageQ)
                         //update progress in Db
-                        updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "In Progress")
+                        updateOrderDbAttribute(rpcObj.params.ref, "shipping", "In Progress")
                     }
                 }
                 "shipOrderOK" -> {
-                    println("Method: ${rpcObj.method} received, processing")
                     //mark order shipped and completed in Db
-                    updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "OK")
-                    updateOrderDbAttribute(rpcObj.params.ref, "OrderStatus", "Completed")
+                    updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Done")
+                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Completed")
+                }
+                "stockCheckNOK","packOrderNOK","shipOrderNOK" -> {
+                    //Send exception onto SNS
+                    val sns = AmazonSNSClientBuilder.defaultClient()
+                    val createTopicResult = sns.createTopic(CreateTopicRequest(SNS_EXCEPTION_TOPIC)) //idempotent, returns topic ARN if exists
+                    sns.publish(PublishRequest(createTopicResult.topicArn, mapper.writeValueAsString(rpcObj)))
+                    //mark stock checked in Db
+                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "On Hold")
                 }
                 "cancelOrder" -> {
-                    println("Method: ${rpcObj.method} received, processing")
-                    updateOrderDbAttribute(rpcObj.params.ref, "Shipping", "Cancelled")
-                    updateOrderDbAttribute(rpcObj.params.ref, "OrderStatus", "Cancelled")
+                    updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Cancelled")
+                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Cancelled")
                 }
                 else -> println("Method: ${rpcObj.method}  is unknown")
             }

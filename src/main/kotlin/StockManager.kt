@@ -18,13 +18,13 @@ class StockManager {
             val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
             when (rpcObj.method) {
                 "newOrder" -> {
-                    println("Method: ${rpcObj.method} received, processing")
+                    logIt("Order ${rpcObj.params.ref}, Method: ${rpcObj.method} received, processing")
                 }
                 "cancelOrder" -> {
-                    println("Method: ${rpcObj.method} received, processing")
+                    logIt("Order ${rpcObj.params.ref}, Method: ${rpcObj.method} received, processing")
                 }
                 "stockCheck" -> {
-                    println("Method: ${rpcObj.method} received, processing")
+                    logIt("Order ${rpcObj.params.ref}, Method: ${rpcObj.method} received, processing")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_ASYNC_HANDLER).queueUrl
                     if (rpcObj.params.ref.toInt()%3 == 0) {   // stockCheck fails if order ref dividable by 3
@@ -32,15 +32,20 @@ class StockManager {
                     } else {
                         rpcObj.method = "stockCheckOK"
                     }
-                    println("Sending Method: ${rpcObj.method} to $SQS_ASYNC_HANDLER")
+                    logIt("Order ${rpcObj.params.ref}, Sending Method: ${rpcObj.method} to $SQS_ASYNC_HANDLER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)
                             .withMessageBody(mapper.writeValueAsString(rpcObj))
                             .withDelaySeconds(5)
                     sqs.sendMessage(sendMessageQ)
                 }
-                else -> println("Method: ${rpcObj.method} is unknown")
+                else -> logIt("Method: ${rpcObj.method} is unknown. Dump:$rpcObj")
             }
         }
         return }
+
+    private fun logIt( message: String){
+        println("$LOG_PREFIX:$message")
+    }
+
 }

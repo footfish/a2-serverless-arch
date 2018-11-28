@@ -13,12 +13,14 @@ import com.amazonaws.services.sqs.AmazonSQSClientBuilder
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.amazonaws.services.sqs.model.SendMessageRequest
 import com.fasterxml.jackson.annotation.JsonInclude
+import com.amazonaws.services.s3.AmazonS3ClientBuilder
+
 
 const val SQS_STOCK_MANAGER = "stockManagerQ"
 const val SQS_PACKING_MANAGER = "packingManagerQ"
 const val SQS_SHIPMENT_MANAGER = "shipmentManagerQ"
 const val SNS_EXCEPTION_TOPIC = "orderException"
-
+const val LOG_PREFIX="[LOG]"
 
 class AsyncHandler {
     val mapper = jacksonObjectMapper()
@@ -30,23 +32,30 @@ class AsyncHandler {
 
         for (record in event.records) {
             val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
-            println("Method: ${rpcObj.method} received, processing")
+            logIt("Method: ${rpcObj.method} received, processing")
             when (rpcObj.method) {
                 "newOrder" -> {
-                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Active")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_STOCK_MANAGER).queueUrl
                     rpcObj.method = "stockCheck"
-                    println("Sending Method: ${rpcObj.method} to $SQS_STOCK_MANAGER")
+                    logIt("Order ${rpcObj.params.ref}, Sending Method: ${rpcObj.method} to $SQS_STOCK_MANAGER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)
                             .withMessageBody(mapper.writeValueAsString(rpcObj))
                             .withDelaySeconds(5)
                     sqs.sendMessage(sendMessageQ)
                     //update progress in Db
+                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Active")
                     updateOrderDbAttribute(rpcObj.params.ref, "stockCheck", "In Progress")
                     updateOrderDbAttribute(rpcObj.params.ref, "packing", "Waiting")
                     updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Waiting")
+/*                    //log to S3
+                    val s3Client = AmazonS3ClientBuilder.defaultClient()
+                    // Upload a text string as a new object.
+                    val stringObjKeyName="test.txt"
+                    val bucketName="orders-xyz-xyz-xyz"
+                    s3Client.putObject(bucketName, stringObjKeyName, "Uploaded String Object"); */
+
                 }
                 "stockCheckOK" -> {
                     //mark stock checked in Db
@@ -57,7 +66,7 @@ class AsyncHandler {
                         val sqs = AmazonSQSClientBuilder.defaultClient()
                         val sqsUrl = sqs.getQueueUrl(SQS_PACKING_MANAGER).queueUrl
                         rpcObj.method = "packOrder"
-                        println("Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
+                        logIt("Order ${rpcObj.params.ref}, Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
                         val sendMessageQ = SendMessageRequest()
                                 .withQueueUrl(sqsUrl)
                                 .withMessageBody(mapper.writeValueAsString(rpcObj))
@@ -66,7 +75,7 @@ class AsyncHandler {
                         //update progress in Db
                         updateOrderDbAttribute(rpcObj.params.ref, "packing", "In Progress")
                     } else {
-                        println("Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
+                        logIt("Order ${rpcObj.params.ref}, Sending Method: ${rpcObj.method} to $SQS_PACKING_MANAGER")
                     }
                 }
                     "packOrderOK" -> {
@@ -78,7 +87,7 @@ class AsyncHandler {
                         val sqs = AmazonSQSClientBuilder.defaultClient()
                         val sqsUrl = sqs.getQueueUrl(SQS_SHIPMENT_MANAGER).queueUrl
                         rpcObj.method = "shipOrder"
-                        println("Sending Method: ${rpcObj.method} to $SQS_SHIPMENT_MANAGER")
+                        logIt("Order ${rpcObj.params.ref}, Sending Method: ${rpcObj.method} to $SQS_SHIPMENT_MANAGER")
                         val sendMessageQ = SendMessageRequest()
                                 .withQueueUrl(sqsUrl)
                                 .withMessageBody(mapper.writeValueAsString(rpcObj))
@@ -92,6 +101,7 @@ class AsyncHandler {
                     //mark order shipped and completed in Db
                     updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Done")
                     updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Completed")
+                    logIt("Order ${rpcObj.params.ref}, Completed")
                 }
                 "stockCheckNOK","packOrderNOK","shipOrderNOK" -> {
                     //Send exception onto SNS
@@ -100,12 +110,14 @@ class AsyncHandler {
                     sns.publish(PublishRequest(createTopicResult.topicArn, mapper.writeValueAsString(rpcObj)))
                     //mark stock checked in Db
                     updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "On Hold")
+                    logIt("Order ${rpcObj.params.ref}, Received ${rpcObj.method} order on hold")
                 }
                 "cancelOrder" -> {
                     updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Cancelled")
                     updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Cancelled")
+                    logIt("Order ${rpcObj.params.ref}, Cancelled")
                 }
-                else -> println("Method: ${rpcObj.method}  is unknown")
+                else -> logIt("Method: ${rpcObj.method}  is unknown. Dump:$rpcObj")
             }
         }
 
@@ -124,5 +136,9 @@ class AsyncHandler {
         val orderTable = DynamoDB(AmazonDynamoDBClientBuilder.standard().build()).getTable(ORDER_TABLE)
         val orderStatus = orderTable.getItem("orderRef", orderRef, "orderStatus", null).getString("orderStatus")
         return (orderStatus == "Active")
+    }
+
+    private fun logIt( message: String){
+        println("$LOG_PREFIX:$message")
     }
 }

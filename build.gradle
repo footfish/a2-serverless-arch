@@ -37,7 +37,7 @@ dependencies {
     compile "com.amazonaws:aws-lambda-java-events:2.2.3"
     compile "com.amazonaws:aws-java-sdk-dynamodb:$aws_sdk_version"
     compile "com.amazonaws:aws-java-sdk-sqs:$aws_sdk_version"
-    compile "com.amazonaws:aws-java-sdk-sns:$aws_sdk_version"    
+    compile "com.amazonaws:aws-java-sdk-sns:$aws_sdk_version"
 }
 
 aws {
@@ -56,6 +56,18 @@ task deployFunction(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, t
     memorySize = 512
     timeout = 30
 }
+
+task deployFunctionLogger(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
+    functionName = project.name+('-logger')
+    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
+    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+
+    zipFile = shadowJar.archivePath
+    handler = "Logger::lambdaHandler"   //format 'ClassName::functionName'
+    memorySize = 512
+    timeout = 30
+}
+
 
 task deployFunctionSyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-sync-handler')

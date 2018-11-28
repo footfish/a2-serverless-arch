@@ -33,6 +33,7 @@ class SyncHandler {
         val rpcObj = mapper.readValue<JsonRpcInput>(input) //deserialise JSON input stream to rpcObj
         val orderTable = DynamoDB(AmazonDynamoDBClientBuilder.standard().build()).getTable(ORDER_TABLE)
 
+        logIt("Order ${rpcObj.params.ref}, ${rpcObj.method} processing")
         when (rpcObj.method) {
             "newOrder" -> {
                 //Store order in Db
@@ -52,6 +53,7 @@ class SyncHandler {
                     sns.publish(PublishRequest(createTopicResult.topicArn, mapper.writeValueAsString(rpcObj)))
                 }
                 catch (e: Exception){
+                    logIt("Order ${rpcObj.params.ref} ${rpcObj.method} ${e.message}")
                     mapper.writeValue(output, JsonRPCErrorOutput( "2.0","{\"code\": -32601, \"message\": \"${e.message}\"}",rpcObj.id))
                    }
             }
@@ -61,6 +63,7 @@ class SyncHandler {
                     mapper.writeValue(output, JsonRPCResultOutput("2.0", orderTable.getItem("orderRef", rpcObj.params.ref, null, null).toJSON(), rpcObj.id))
                 }
                 catch (e: Exception){
+                    logIt("Order ${rpcObj.params.ref} ${rpcObj.method} ${e.message}")
                     mapper.writeValue(output, JsonRPCErrorOutput( "2.0","{\"code\": -32601, \"message\": \"${e.message}\"}",rpcObj.id))
                 }
             }
@@ -76,15 +79,25 @@ class SyncHandler {
                         sns.publish(PublishRequest(createTopicResult.topicArn, mapper.writeValueAsString(rpcObj)))
                         mapper.writeValue(output, JsonRPCResultOutput( "2.0","200 OK",rpcObj.id))
                     } else {
+                        logIt("Order ${rpcObj.params.ref} ${rpcObj.method} Can't cancel order")
                         mapper.writeValue(output, JsonRPCErrorOutput("2.0", "{\"code\": -32601, \"message\": \"Can't cancel order\"}", rpcObj.id))
                     }
                 }
                 catch (e: Exception){
+                    logIt("Order ${rpcObj.params.ref} ${rpcObj.method} ${e.message}")
                     mapper.writeValue(output, JsonRPCErrorOutput( "2.0","{\"code\": -32601, \"message\": \"${e.message}\"}",rpcObj.id))
                 }
             }
-                else -> mapper.writeValue(output, JsonRPCErrorOutput( "2.0","{\"code\": -32601, \"message\": \"Method not found\"}",rpcObj.id))
+            else -> {
+                logIt("${rpcObj.method} Method not found. Dump:$rpcObj ")
+                mapper.writeValue(output, JsonRPCErrorOutput("2.0", "{\"code\": -32601, \"message\": \"Method not found\"}", rpcObj.id))
+            }
         }
 
     }
+
+    private fun logIt( message: String){
+        println("$LOG_PREFIX:$message")
+    }
+
 }

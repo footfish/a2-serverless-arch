@@ -14,6 +14,10 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.amazonaws.services.sqs.model.SendMessageRequest
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
+import com.amazonaws.services.s3.model.CannedAccessControlList
+import com.amazonaws.services.s3.model.ObjectMetadata
+import java.util.*
+import java.io.ByteArrayInputStream
 
 
 const val SQS_STOCK_MANAGER = "stockManagerQ"
@@ -21,6 +25,8 @@ const val SQS_PACKING_MANAGER = "packingManagerQ"
 const val SQS_SHIPMENT_MANAGER = "shipmentManagerQ"
 const val SNS_EXCEPTION_TOPIC = "orderException"
 const val LOG_PREFIX="[LOG]"
+const val S3_REPORT_BUCKET="a2-serverless-arch-report" //must conform with DNS requirements and must be unique across all of Amazon S3.
+
 
 class AsyncHandler {
     val mapper = jacksonObjectMapper()
@@ -32,7 +38,7 @@ class AsyncHandler {
 
         for (record in event.records) {
             val rpcObj = mapper.readValue<JsonRpcInput>(record.body)
-            logIt("Method: ${rpcObj.method} received, processing")
+            logIt("Order ${rpcObj.params.ref}, Method: ${rpcObj.method} received, processing")
             when (rpcObj.method) {
                 "newOrder" -> {
                     val sqs = AmazonSQSClientBuilder.defaultClient()
@@ -49,13 +55,6 @@ class AsyncHandler {
                     updateOrderDbAttribute(rpcObj.params.ref, "stockCheck", "In Progress")
                     updateOrderDbAttribute(rpcObj.params.ref, "packing", "Waiting")
                     updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Waiting")
-/*                    //log to S3
-                    val s3Client = AmazonS3ClientBuilder.defaultClient()
-                    // Upload a text string as a new object.
-                    val stringObjKeyName="test.txt"
-                    val bucketName="orders-xyz-xyz-xyz"
-                    s3Client.putObject(bucketName, stringObjKeyName, "Uploaded String Object"); */
-
                 }
                 "stockCheckOK" -> {
                     //mark stock checked in Db
@@ -102,6 +101,29 @@ class AsyncHandler {
                     updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Done")
                     updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Completed")
                     logIt("Order ${rpcObj.params.ref}, Completed")
+
+                    //Write html report file to S3
+                    val s3Client = AmazonS3ClientBuilder.defaultClient()
+                    if(!s3Client.doesBucketExist(S3_REPORT_BUCKET)) {
+                        s3Client.createBucket(S3_REPORT_BUCKET)
+                    }
+                    val stringObjKeyName="${UUID.randomUUID()}.html" // random filename
+                    var htmlOrderReport = "<html><body>"
+                    htmlOrderReport += "<script src='https://cdnjs.cloudflare.com/ajax/libs/json2html/1.2.0/json2html.min.js'></script>"
+                    htmlOrderReport += "<h1>Order:${rpcObj.params.ref}</h1>"
+                    htmlOrderReport += "<script>"
+                    htmlOrderReport += "var t = {'<>':'div','html':'\${qty} x \${title} (\${desc})' };"
+                    htmlOrderReport += "var d = ${rpcObj.params.order};"
+                    htmlOrderReport += "document.write( json2html.transform(d,t) );"
+                    htmlOrderReport += "</script>"
+                    htmlOrderReport += "</body></html>"
+                    val htmlOrderReportStream = ByteArrayInputStream(htmlOrderReport.toByteArray(Charsets.UTF_8))
+                    val metadata = ObjectMetadata()
+                    metadata.contentType = "text/html"
+                    s3Client.putObject(S3_REPORT_BUCKET, stringObjKeyName, htmlOrderReportStream, metadata) //Write Order to file
+                    s3Client.setObjectAcl(S3_REPORT_BUCKET, stringObjKeyName,CannedAccessControlList.PublicRead)  //make file public
+                    val reportUrl = s3Client.getUrl(S3_REPORT_BUCKET, stringObjKeyName).toExternalForm() //get url for publishing
+                    logIt("Order ${rpcObj.params.ref}, $reportUrl")
                 }
                 "stockCheckNOK","packOrderNOK","shipOrderNOK" -> {
                     //Send exception onto SNS

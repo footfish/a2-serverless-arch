@@ -27,7 +27,11 @@ class ShipmentManager {
                     logIt("Order ${rpcObj.params.ref}, Method: ${rpcObj.method} received, processing")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_ASYNC_HANDLER).queueUrl
-                    rpcObj.method="shipOrderOK"
+                    if (rpcObj.params.ref.toInt()%7 == 0) {   // make shipOrder fail case
+                        rpcObj.method = "shipOrderNOK"
+                    } else {
+                        rpcObj.method = "shipOrderOK"
+                    }
                     logIt("Order ${rpcObj.params.ref}, Sending Method: ${rpcObj.method} to $SQS_ASYNC_HANDLER")
                     val sendMessageQ = SendMessageRequest()
                             .withQueueUrl(sqsUrl)

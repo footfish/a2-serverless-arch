@@ -27,7 +27,7 @@ class StockManager {
                     logIt("Order ${rpcObj.params.ref}, Method: ${rpcObj.method} received, processing")
                     val sqs = AmazonSQSClientBuilder.defaultClient()
                     val sqsUrl = sqs.getQueueUrl(SQS_ASYNC_HANDLER).queueUrl
-                    if (rpcObj.params.ref.toInt()%3 == 0) {   // stockCheck fails if order ref dividable by 3
+                    if (rpcObj.params.ref.toInt()%5 == 0) {   // make stockCheck fail case
                         rpcObj.method = "stockCheckNOK"
                     } else {
                         rpcObj.method = "stockCheckOK"

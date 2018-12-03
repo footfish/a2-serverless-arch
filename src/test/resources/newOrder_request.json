@@ -1,6 +1,6 @@
 {"jsonrpc": "2.0",
   "method": "newOrder",
-  "params": { "ref": "13",
+  "params": { "ref": "2",
     "order": "[{\"title\": \"Shoes\", \"desc\": \"blue\", \"qty\": 2},{\"title\": \"Jacket\", \"desc\": \"red\", \"qty\": 1}]"
   },
   "id": "5"}

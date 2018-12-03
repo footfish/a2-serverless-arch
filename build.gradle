@@ -45,18 +45,6 @@ aws {
     region "eu-west-1"
 }
 
-
-task deployFunction(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
-    functionName = project.name.replace('.','-') //NOTE: can't have period (.) in project name
-    runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
-
-    zipFile = shadowJar.archivePath
-    handler = "OrderHandler::lambdaHandler"   //format 'ClassName::functionName'
-    memorySize = 512
-    timeout = 30
-}
-
 task deployFunctionLogger(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-logger')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
@@ -67,7 +55,6 @@ task deployFunctionLogger(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadow
     memorySize = 512
     timeout = 30
 }
-
 
 task deployFunctionSyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-sync-handler')

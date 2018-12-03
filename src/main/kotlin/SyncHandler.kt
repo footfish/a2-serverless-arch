@@ -19,9 +19,8 @@ data class JsonRpcInput(val jsonrpc: String, var method: String, var id: String=
 data class JsonRPCResultOutput(val jsonrpc: String, val result: String, val id: String)
 data class JsonRPCErrorOutput(val jsonrpc: String, val error: String, val id: String)
 data class OrderData(var order: String="", val ref: String)
-const val ORDER_TABLE = "order"
-const val SQS_ASYNC_HANDLER = "asyncHandlerQ"
-const val SNS_ORDER_TOPIC = "orderTopic"
+
+
 
 class SyncHandler {
     val mapper = jacksonObjectMapper()

@@ -18,13 +18,20 @@ import com.amazonaws.services.s3.model.CannedAccessControlList
 import com.amazonaws.services.s3.model.ObjectMetadata
 import java.util.*
 import java.io.ByteArrayInputStream
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 
 const val SQS_STOCK_MANAGER = "stockManagerQ"
 const val SQS_PACKING_MANAGER = "packingManagerQ"
 const val SQS_SHIPMENT_MANAGER = "shipmentManagerQ"
+const val SQS_ASYNC_HANDLER = "asyncHandlerQ"
 const val SNS_EXCEPTION_TOPIC = "orderException"
-const val LOG_PREFIX="[LOG]"
+const val SNS_COMPLETION_TOPIC = "orderCompletion"
+const val SNS_ORDER_TOPIC = "orderTopic"
+const val ORDER_TABLE = "order"
+const val LOG_TABLE = "log"
+const val LOG_PREFIX="[LOG]" //used in Cloudwatch Log subscription filter pattern
 const val S3_REPORT_BUCKET="a2-serverless-arch-report" //must conform with DNS requirements and must be unique across all of Amazon S3.
 
 
@@ -97,44 +104,49 @@ class AsyncHandler {
                     }
                 }
                 "shipOrderOK" -> {
-                    //mark order shipped and completed in Db
-                    updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Done")
-                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Completed")
-                    logIt("Order ${rpcObj.params.ref}, Completed")
-
+                    var reportUrl = "No bucket"
                     //Write html report file to S3
                     val s3Client = AmazonS3ClientBuilder.defaultClient()
-                    if(!s3Client.doesBucketExist(S3_REPORT_BUCKET)) {
-                        s3Client.createBucket(S3_REPORT_BUCKET)
-                    }
-                    val stringObjKeyName="${UUID.randomUUID()}.html" // random filename
-                    var htmlOrderReport = "<html><body>"
-                    htmlOrderReport += "<script src='https://cdnjs.cloudflare.com/ajax/libs/json2html/1.2.0/json2html.min.js'></script>"
-                    htmlOrderReport += "<h1>Order:${rpcObj.params.ref}</h1>"
-                    htmlOrderReport += "<script>"
-                    htmlOrderReport += "var t = {'<>':'div','html':'\${qty} x \${title} (\${desc})' };"
-                    htmlOrderReport += "var d = ${rpcObj.params.order};"
-                    htmlOrderReport += "document.write( json2html.transform(d,t) );"
-                    htmlOrderReport += "</script>"
-                    htmlOrderReport += "</body></html>"
-                    val htmlOrderReportStream = ByteArrayInputStream(htmlOrderReport.toByteArray(Charsets.UTF_8))
-                    val metadata = ObjectMetadata()
-                    metadata.contentType = "text/html"
-                    s3Client.putObject(S3_REPORT_BUCKET, stringObjKeyName, htmlOrderReportStream, metadata) //Write Order to file
-                    s3Client.setObjectAcl(S3_REPORT_BUCKET, stringObjKeyName,CannedAccessControlList.PublicRead)  //make file public
-                    val reportUrl = s3Client.getUrl(S3_REPORT_BUCKET, stringObjKeyName).toExternalForm() //get url for publishing
-                    logIt("Order ${rpcObj.params.ref}, $reportUrl")
+                    if(s3Client.doesBucketExist(S3_REPORT_BUCKET)) {
+                        val stringObjKeyName="${UUID.randomUUID()}.html" // random filename
+                        var htmlOrderReport = "<html><body  style=\"font:16px arial, sans-serif;\">"
+                        htmlOrderReport += "<script src='https://cdnjs.cloudflare.com/ajax/libs/json2html/1.2.0/json2html.min.js'></script>"
+                        htmlOrderReport += "<h1>Order:${rpcObj.params.ref}</h1>"
+                        htmlOrderReport += "Completed: ${LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"))}"
+                        htmlOrderReport += "<script>"
+                        htmlOrderReport += "var t = {'<>':'div','html':'\${qty} x \${title} (\${desc})' };"
+                        htmlOrderReport += "var d = ${rpcObj.params.order};"
+                        htmlOrderReport += "document.write( json2html.transform(d,t) );"
+                        htmlOrderReport += "</script>"
+                        htmlOrderReport += "</body></html>"
+                        val htmlOrderReportStream = ByteArrayInputStream(htmlOrderReport.toByteArray(Charsets.UTF_8))
+                        val metadata = ObjectMetadata()
+                        metadata.contentType = "text/html"
+                        s3Client.putObject(S3_REPORT_BUCKET, stringObjKeyName, htmlOrderReportStream, metadata) //Write Order to file
+                        s3Client.setObjectAcl(S3_REPORT_BUCKET, stringObjKeyName,CannedAccessControlList.PublicRead)  //make file public
+                        reportUrl = s3Client.getUrl(S3_REPORT_BUCKET, stringObjKeyName).toExternalForm() //get url for publishing
+                        }
+                    //Send SNS notification of completion with url
+                    val sns = AmazonSNSClientBuilder.defaultClient()
+                    val createTopicResult = sns.createTopic(CreateTopicRequest(SNS_COMPLETION_TOPIC)) //idempotent, returns topic ARN if exists
+                    sns.publish(PublishRequest(createTopicResult.topicArn, "Order Report: $reportUrl"))
+
+                    //Record order completion
+                    updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Done")
+                    updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Completed")
+                    logIt("Order ${rpcObj.params.ref}, Completed: $reportUrl")
                 }
                 "stockCheckNOK","packOrderNOK","shipOrderNOK" -> {
                     //Send exception onto SNS
                     val sns = AmazonSNSClientBuilder.defaultClient()
                     val createTopicResult = sns.createTopic(CreateTopicRequest(SNS_EXCEPTION_TOPIC)) //idempotent, returns topic ARN if exists
                     sns.publish(PublishRequest(createTopicResult.topicArn, mapper.writeValueAsString(rpcObj)))
-                    //mark stock checked in Db
+                    //Record order placed on hold
                     updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "On Hold")
                     logIt("Order ${rpcObj.params.ref}, Received ${rpcObj.method} order on hold")
                 }
                 "cancelOrder" -> {
+                    //Record order cancellation
                     updateOrderDbAttribute(rpcObj.params.ref, "shipping", "Cancelled")
                     updateOrderDbAttribute(rpcObj.params.ref, "orderStatus", "Cancelled")
                     logIt("Order ${rpcObj.params.ref}, Cancelled")

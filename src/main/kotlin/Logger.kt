@@ -11,7 +11,7 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.util.*
 
-const val LOG_TABLE = "log"
+
 data class CloudWatchLogsData( val owner: String, val logGroup: String, val logStream: String, val subscriptionFilters: Array<String>, val messageType: String, val logEvents: Array<CloudWatchLogsLogEvent> )
 data class CloudWatchLogsLogEvent( val id: String, val message: String, val timestamp: Long)
 

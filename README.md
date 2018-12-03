@@ -146,7 +146,7 @@ aws s3 mb s3://a2-serverless-arch-report
 ```
 
 ## Invocation
-JSON RPC examples are in folder test/resources/. 
+JSON RPC examples can be found in folder ./test/resources/. 
 
 You can execute by pasting JSON payload from files to aws cli as follows; 
 
@@ -158,6 +158,8 @@ cat output.txt
 ...but much easier just to invoke from IDE 
 
 ![Fig 3. Invoke from IDE](img/a2-serverless-invoke.png)
+
+![Fig 3. Invoke from IDE](img/a2-serverless-invoke2.png)
 
 
 ## Authors

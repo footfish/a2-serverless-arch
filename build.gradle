@@ -41,14 +41,14 @@ dependencies {
 }
 
 aws {
-    profileName "default"
-    region "eu-west-1"
+    profileName = "default"
+    region = "eu-west-1"
 }
 
 task deployFunctionLogger(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-logger')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+    role = "arn:aws:iam::${aws.accountId}:role/a2_lambda"
 
     zipFile = shadowJar.archivePath
     handler = "Logger::lambdaHandler"   //format 'ClassName::functionName'
@@ -59,7 +59,7 @@ task deployFunctionLogger(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadow
 task deployFunctionSyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-sync-handler')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+    role = "arn:aws:iam::${aws.accountId}:role/a2_lambda"
 
     zipFile = shadowJar.archivePath
     handler = "SyncHandler::lambdaHandler"   //format 'ClassName::functionName'
@@ -70,7 +70,7 @@ task deployFunctionSyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [s
 task deployFunctionAsyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-async-handler')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+    role = "arn:aws:iam::${aws.accountId}:role/a2_lambda"
 
     zipFile = shadowJar.archivePath
     handler = "AsyncHandler::lambdaHandler"   //format 'ClassName::functionName'
@@ -81,7 +81,7 @@ task deployFunctionAsyncHandler(type: AWSLambdaMigrateFunctionTask, dependsOn: [
 task deployFunctionStockManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-stock-manager')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+    role = "arn:aws:iam::${aws.accountId}:role/a2_lambda"
 
     zipFile = shadowJar.archivePath
     handler = "StockManager::lambdaHandler"   //format 'ClassName::functionName'
@@ -92,7 +92,7 @@ task deployFunctionStockManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [
 task deployFunctionPackingManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-packing-manager')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+    role = "arn:aws:iam::${aws.accountId}:role/a2_lambda"
 
     zipFile = shadowJar.archivePath
     handler = "PackingManager::lambdaHandler"   //format 'ClassName::functionName'
@@ -103,7 +103,7 @@ task deployFunctionPackingManager(type: AWSLambdaMigrateFunctionTask, dependsOn:
 task deployFunctionShipmentManager(type: AWSLambdaMigrateFunctionTask, dependsOn: [shadowJar, test]) {
     functionName = project.name+('-shipment-manager')
     runtime = com.amazonaws.services.lambda.model.Runtime.Java8
-    role = "arn:aws:iam::${aws.accountId}:role/lambda_basic_execution"
+    role = "arn:aws:iam::${aws.accountId}:role/a2_lambda"
 
     zipFile = shadowJar.archivePath
     handler = "ShipmentManager::lambdaHandler"   //format 'ClassName::functionName'
@@ -138,8 +138,6 @@ task invokeSyncHandlerCancelOrder(type: AWSLambdaInvokeTask) {
         println "Lambda function result: " + new String(invokeResult.payload.array(), "UTF-8")
     }
 }
-
-
 
 
 task deleteFunction(type: AWSLambdaDeleteFunctionTask) {

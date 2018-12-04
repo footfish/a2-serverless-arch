@@ -12,7 +12,7 @@ A simple stock handling solution illustrating uses of AWS Lambda, SNS (simple no
 
 ![Fig 1. A2 Serverless Diagram](img/a2-serverless-diagram.png)
 
-Explanation of a normal order flow.
+Explanation of a normal sequence of events initiated by newOrder request.
 - Lambda *SyncHandler* receives asynchronous json rpc api method *newOrder*
 - Lambda *SyncHandler* inserts order to db *order* table and sends '200 OK' response to api call. 
 - Lambda *SyncHandler* sends *newOrder* method+data to SNS topic *orderTopic* 
@@ -20,7 +20,7 @@ Explanation of a normal order flow.
 - Lambda *AsyncHandler* processes *newOrder* and sends a *stockCheck* to SQS *stockManagerQ* (checking stock). The order status is updated in db.
 - Lambda *stockManagerQ* processes *stockCheck* and returns result to SQS *AsyncHandler*. (normally *stockCheckOK*, but if orderRef/5 then *stockCheckNOK* ) 
 - Lambda *AsyncHandler* processes *stockCheckOK*  and sends a *packOrder* to SQS *packingManagerQ*. The order status is updated in db.
-- .. And so on until *shipOrder* is received by Lambda *AsyncHandler* which means order completed. 
+- .. And so on until *shipOrderOK* is received by Lambda *AsyncHandler* which means order completed. 
 - Lambda *AsyncHandler* writes a html report to S3 and sends notification with url to SNS topic *orderCompletion*.
 - The order process is centrally logged in db *log* table. This is by streaming & filtering cloudwatch logs to Lambda Logger.  
  

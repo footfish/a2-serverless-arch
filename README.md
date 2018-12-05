@@ -114,10 +114,10 @@ aws sns create-topic --name orderCompletion
 aws sns create-topic --name orderTopic
 
 # Add SQS subscription's for orderTopic
-aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-asyncHandlerQ
-aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-packingManagerQ
-aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-stockManagerQ
-aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-shipmentManagerQ
+aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-asyncHandlerQ  --attributes RawMessageDelivery=true
+aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-packingManagerQ  --attributes RawMessageDelivery=true
+aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-stockManagerQ  --attributes RawMessageDelivery=true
+aws sns subscribe --topic-arn $topic-arn-orderTopic --protocol sqs --notification-endpoint  $aws-arn-shipmentManagerQ  --attributes RawMessageDelivery=true
 
 # Add email subscription's for orderCompletion
 aws sns subscribe --topic-arn $topic-arn-orderCompletion --protocol email --notification-endpoint $orderCompletion-email-address
